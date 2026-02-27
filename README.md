@@ -99,8 +99,8 @@ kubectl -n argocd get secret argocd-initial-admin-secret \
 
 # GitLab
 # URL: http://gitlab.localhost
-kubectl get secret gitlab-gitlab-initial-root-password -n gitlab \
-  -o jsonpath='{.data.password}' | base64 -d
+# The initial root password is generated inside the pod on first boot
+kubectl exec -n gitlab gitlab-0 -- grep "Password:" /etc/gitlab/initial_root_password
 ```
 
 ## Workflows
