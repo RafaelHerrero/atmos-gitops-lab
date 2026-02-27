@@ -1,0 +1,33 @@
+# Atmos CLI Configuration for atmos-gitops-lab
+# Documentation: https://atmos.tools/cli/configuration
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: true
+    apply_auto_approve: false
+    deploy_run_init: true
+    command: "terraform"
+
+  helmfile:
+    base_path: "components/helmfile"
+    use_eks: false
+    kubeconfig_path: ""
+    command: "helmfile"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*.yaml"
+  excluded_paths:
+    - "**/_*.yaml"
+    - "catalog/**"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info
+
+workflows:
+  base_path: "workflows"

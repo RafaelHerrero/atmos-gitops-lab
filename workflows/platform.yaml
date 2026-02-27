@@ -1,0 +1,269 @@
+# Platform Workflows
+# Automated deployment and management workflows for the atmos-gitops-lab platform
+
+workflows:
+  # ============================================================================
+  # deploy-platform: Complete end-to-end deployment
+  # ============================================================================
+  deploy-platform:
+    description: "Deploy complete platform (cluster + all components)"
+    steps:
+      - name: deploy-cluster
+        description: "Create k3d cluster via Terraform"
+        type: atmos
+        command: terraform apply cluster-k3d -auto-approve
+
+      - name: deploy-components
+        description: "Deploy all platform components"
+        type: atmos
+        command: helmfile apply platform
+
+      - name: display-info
+        description: "Display access information"
+        type: shell
+        command: |
+          echo ""
+          echo "=========================================="
+          echo "Platform Deployment Complete!"
+          echo "=========================================="
+          echo ""
+          echo "Get ArgoCD admin password:"
+          echo "  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+          echo ""
+          echo "Check status:"
+          echo "  atmos workflow status -s {{ .stack }}"
+          echo "=========================================="
+          echo ""
+
+  # ============================================================================
+  # deploy-cluster: Create cluster only (no platform components)
+  # ============================================================================
+  deploy-cluster:
+    description: "Create k3d cluster only (no platform components)"
+    steps:
+      - name: deploy-cluster
+        description: "Create k3d cluster"
+        type: atmos
+        command: terraform apply cluster-k3d -auto-approve
+
+      - name: verify-cluster
+        description: "Verify cluster is ready"
+        type: shell
+        command: |
+          echo ""
+          echo "Verifying cluster..."
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          echo ""
+          echo "✓ Cluster created successfully"
+          echo ""
+          echo "Deploy platform components:"
+          echo "  atmos workflow deploy-components -s {{ .stack }}"
+          echo ""
+
+  # ============================================================================
+  # deploy-components: Deploy platform to existing cluster
+  # ============================================================================
+  deploy-components:
+    description: "Deploy platform components to existing cluster"
+    steps:
+      - name: verify-cluster
+        description: "Verify cluster is accessible"
+        type: shell
+        command: |
+          echo "Verifying cluster access..."
+          if ! kubectl get nodes &> /dev/null; then
+            echo "ERROR: Cannot access cluster"
+            echo "Make sure cluster exists and kubectl context is set"
+            exit 1
+          fi
+          echo "✓ Cluster is accessible"
+          echo ""
+
+      - name: verify-mount
+        description: "Verify volume mount (after CNI is deployed)"
+        type: shell
+        continue_on_error: true
+        command: |
+          echo "Verifying volume mount..."
+          kubectl run mount-verify --image=busybox --rm -i --restart=Never -- sh -c "ls -la /mnt/atmos-gitops-lab/src/k8s-apps" 2>&1 | grep -q "k8s-apps" && echo "✓ Volume mount verified" || echo "⚠ Could not verify mount"
+          echo ""
+
+      - name: deploy-platform
+        description: "Deploy all platform components"
+        type: atmos
+        command: helmfile apply platform
+
+      - name: show-status
+        description: "Show deployment status"
+        type: shell
+        command: |
+          echo ""
+          echo "Deployment complete. Checking status..."
+          echo ""
+          kubectl get pods -A | grep -E "NAMESPACE|postgres|argocd|gitlab"
+          echo ""
+          echo "Get ArgoCD admin password:"
+          echo "  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+          echo ""
+
+  # ============================================================================
+  # destroy-components: Destroy components only (leave cluster running)
+  # ============================================================================
+  destroy-components:
+    description: "Destroy platform components only (cluster remains)"
+    steps:
+      - name: verify-cluster
+        description: "Verify cluster is accessible"
+        type: shell
+        command: |
+          echo "Verifying cluster access..."
+          if ! kubectl get nodes &> /dev/null; then
+            echo "ERROR: Cannot access cluster"
+            exit 1
+          fi
+          echo "✓ Cluster is accessible"
+          echo ""
+
+      - name: warning
+        description: "Display warning"
+        type: shell
+        command: |
+          echo ""
+          echo "⚠️  WARNING: This will destroy all platform components!"
+          echo ""
+          echo "Stack: {{ .stack }}"
+          echo ""
+          echo "This will:"
+          echo "  • Delete all Helmfile releases (ArgoCD, PostgreSQL, etc.)"
+          echo "  • Remove all data (databases, GitLab data, etc.)"
+          echo "  • Keep the k3d cluster running"
+          echo ""
+          echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+          sleep 5
+          echo ""
+
+      - name: destroy-components
+        description: "Destroy platform components via Helmfile"
+        type: atmos
+        command: helmfile destroy platform
+
+      - name: cleanup-complete
+        description: "Cleanup complete"
+        type: shell
+        command: |
+          echo ""
+          echo "✓ Platform components destroyed successfully"
+          echo ""
+          echo "The cluster is still running. To redeploy components:"
+          echo "  atmos workflow deploy-components -s {{ .stack }}"
+          echo ""
+          echo "To destroy the cluster as well:"
+          echo "  atmos workflow destroy-cluster -s {{ .stack }}"
+          echo ""
+
+  # ============================================================================
+  # destroy-platform: Complete teardown (components + cluster)
+  # ============================================================================
+  destroy-platform:
+    description: "Destroy complete platform (components + cluster)"
+    steps:
+      - name: warning
+        description: "Display warning"
+        type: shell
+        command: |
+          echo ""
+          echo "⚠️  WARNING: This will destroy the entire platform!"
+          echo ""
+          echo "Stack: {{ .stack }}"
+          echo ""
+          echo "This will:"
+          echo "  • Delete all Helmfile releases (ArgoCD, PostgreSQL, etc.)"
+          echo "  • Delete the k3d cluster"
+          echo "  • Remove all data (databases, GitLab data, etc.)"
+          echo ""
+          echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+          sleep 5
+          echo ""
+
+      - name: destroy-components
+        description: "Destroy platform components"
+        type: atmos
+        command: helmfile destroy platform
+        continue_on_error: true
+
+      - name: destroy-cluster
+        description: "Destroy k3d cluster"
+        type: atmos
+        command: terraform destroy cluster-k3d -auto-approve
+
+      - name: cleanup-complete
+        description: "Cleanup complete"
+        type: shell
+        command: |
+          echo ""
+          echo "✓ Platform destroyed successfully"
+          echo ""
+
+  # ============================================================================
+  # destroy-cluster: Destroy cluster only
+  # ============================================================================
+  destroy-cluster:
+    description: "Destroy k3d cluster only"
+    steps:
+      - name: confirm
+        description: "Confirm deletion"
+        type: shell
+        command: |
+          echo ""
+          echo "⚠️  Destroying cluster: {{ .stack }}"
+          echo ""
+          echo "Press Ctrl+C to cancel, or wait 3 seconds to continue..."
+          sleep 3
+          echo ""
+
+      - name: destroy
+        description: "Destroy cluster"
+        type: atmos
+        command: terraform destroy cluster-k3d -auto-approve
+
+      - name: complete
+        description: "Destruction complete"
+        type: shell
+        command: |
+          echo ""
+          echo "✓ Cluster destroyed successfully"
+          echo ""
+
+  # ============================================================================
+  # status: Show platform status
+  # ============================================================================
+  status:
+    description: "Show platform status"
+    steps:
+      - name: show-status
+        description: "Display platform status"
+        type: shell
+        command: |
+          echo ""
+          echo "=========================================="
+          echo "Platform Status - Stack: {{ .stack }}"
+          echo "=========================================="
+          echo ""
+          echo "Cluster Nodes:"
+          echo "----------------------------------------"
+          kubectl get nodes
+          echo ""
+          echo "Platform Pods:"
+          echo "----------------------------------------"
+          kubectl get pods -A | grep -E "NAMESPACE|postgres|argocd|gitlab"
+          echo ""
+          echo "Helm Releases:"
+          echo "----------------------------------------"
+          helm list -A
+          echo ""
+          echo "ArgoCD Applications:"
+          echo "----------------------------------------"
+          kubectl get applications -n argocd 2>/dev/null || echo "ArgoCD not deployed or no applications found"
+          echo ""
+          echo "=========================================="
+          echo ""

@@ -1,0 +1,17 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.d/
+backend.tf.json
+.terraform.lock.hcl
+crash.log
+
+# Atmos
+.atmos/
+
+# k3d generated configs
+components/terraform/cluster-k3d/.atmos-k3d-*.yaml
+
+# OS
+.DS_Store

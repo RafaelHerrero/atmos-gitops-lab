@@ -1,0 +1,134 @@
+# ArgoCD Helm Values
+# Generated from Atmos template for {{ .Environment.Name }} environment
+
+global:
+  domain: {{ .Values.argocd_domain | default "argocd.localhost" }}
+
+# Configure ArgoCD Server
+server:
+  replicas: 1
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Insecure mode (no TLS) for localhost development
+  extraArgs:
+    - --insecure
+  
+  config:
+    timeout.reconciliation: {{ .Values.argocd_auto_sync_interval | default "30s" }}
+    application.instanceLabelKey: argocd.argoproj.io/instance
+    
+    repositories: |
+      - type: fs
+        name: local-k8s-apps
+        path: /mnt/atmos-gitops-lab/src/k8s-apps
+
+# Configure Repository Server
+repoServer:
+  replicas: 1
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  
+  # Mount Git repository from host
+  volumes:
+    - name: gitops-repo
+      hostPath:
+        path: /mnt/atmos-gitops-lab
+        type: Directory
+  
+  volumeMounts:
+    - name: gitops-repo
+      mountPath: /mnt/atmos-gitops-lab
+      readOnly: true
+
+# Configure Application Controller
+controller:
+  replicas: 1
+  
+  resources:
+    limits:
+      cpu: {{ .Values.resource_limits.argocd.cpu }}
+      memory: {{ .Values.resource_limits.argocd.memory }}
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  
+  args:
+    statusProcessors: 10
+    operationProcessors: 5
+    appResyncPeriod: {{ .Values.argocd_auto_sync_interval | default "30" }}
+
+# Disable Dex (SSO) - not needed for local development
+dex:
+  enabled: false
+
+# Disable notifications
+notifications:
+  enabled: false
+
+# ApplicationSet controller
+applicationSet:
+  enabled: true
+  replicas: 1
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Redis configuration
+redis:
+  enabled: true
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# ArgoCD configuration
+configs:
+  cm:
+    timeout.reconciliation: {{ .Values.argocd_auto_sync_interval | default "30s" }}
+    application.instanceLabelKey: argocd.argoproj.io/instance
+    
+    # Resource exclusions
+    resource.exclusions: |
+      - apiGroups:
+        - cilium.io
+        kinds:
+        - CiliumIdentity
+        clusters:
+        - "*"
+  
+  # RBAC configuration
+  rbac:
+    policy.default: role:admin
+  
+  tls:
+    certificates: {}
+
+# Service configuration
+service:
+  type: ClusterIP
+  servicePortHttp: 80
+  servicePortHttps: 443
+
+# Ingress disabled - using Traefik IngressRoute
+ingress:
+  enabled: false

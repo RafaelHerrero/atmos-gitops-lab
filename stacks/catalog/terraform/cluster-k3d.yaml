@@ -1,0 +1,33 @@
+# Catalog: cluster-k3d defaults
+#
+# Catalogs define reusable default values for components.
+# Stacks (like stacks/local.yaml) import catalogs and inherit these defaults,
+# overriding only what differs per environment.
+#
+# This catalog is imported via: `import: [catalog/terraform/cluster-k3d]`
+# and inherited via: `inherits: [cluster-k3d/defaults]`
+
+components:
+  terraform:
+    cluster-k3d/defaults:
+      metadata:
+        # abstract = not deployed directly, only inherited by stacks
+        type: abstract
+        component: cluster-k3d
+
+      vars:
+        # Cluster sizing
+        servers: 1              # Number of control-plane nodes
+        agents: 2               # Number of worker nodes
+        k3s_version: "v1.35.0-k3s3"
+
+        # k3d configuration
+        disable_load_balancer: false
+
+        # Tags for resources
+        tags:
+          ManagedBy: "atmos"
+          Component: "cluster-k3d"
+
+      # Terraform backend configuration (default: local)
+      backend_type: local

@@ -1,0 +1,106 @@
+# Platform Helmfile - Platform Bootstrap
+# Deploys core platform components in dependency order
+#
+# Dependencies:
+# - k3d cluster must exist (created by Terraform)
+# - kubectl context set to the cluster
+#
+# Components (in order):
+# 1. Postgres Operator
+# 2. ArgoCD
+
+---
+repositories:
+  - name: argo
+    url: https://argoproj.github.io/argo-helm
+
+helmDefaults:
+  # Global defaults for all releases
+  atomic: true
+  cleanupOnFail: true
+  wait: true
+  timeout: 600
+  recreatePods: false
+  force: false
+
+releases:
+  # ============================================================
+  # Wave 1: Postgres Operator (Crunchy Data PGO)
+  # ============================================================
+  - name: postgres-operator
+    namespace: postgres-operator
+    chart: oci://registry.developers.crunchydata.com/crunchydata/pgo
+    version: 6.0.0
+    values:
+      - values/postgres-operator.yaml.gotmpl
+    wait: true
+    timeout: 600
+    hooks:
+      - events: ["presync"]
+        showlogs: true
+        command: "/bin/sh"
+        args:
+          - "-c"
+          - "kubectl create namespace postgres-operator --dry-run=client -o yaml | kubectl apply -f -"
+      - events: ["postsync"]
+        showlogs: true
+        command: "/bin/sh"
+        args:
+          - "-c"
+          - |
+            echo "Waiting for Postgres Operator to be ready..."
+            kubectl wait --for=condition=Available deployment/pgo -n postgres-operator --timeout=300s
+            echo "Postgres Operator deployed successfully"
+
+  # ============================================================
+  # Wave 2: ArgoCD (GitOps Controller)
+  # Depends on: Postgres Operator
+  # ============================================================
+  - name: argocd
+    namespace: argocd
+    chart: argo/argo-cd
+    version: 7.7.16
+    values:
+      - values/argocd.yaml.gotmpl
+    needs:
+      - postgres-operator/postgres-operator
+    wait: true
+    timeout: 600
+    hooks:
+      - events: ["presync"]
+        showlogs: true
+        command: "/bin/sh"
+        args:
+          - "-c"
+          - "kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -"
+      - events: ["postsync"]
+        showlogs: true
+        command: "/bin/sh"
+        args:
+          - "-c"
+          - |
+            echo "Waiting for ArgoCD to be ready..."
+            kubectl wait --for=condition=Available deployment/argocd-server -n argocd --timeout=300s
+            kubectl wait --for=condition=Available deployment/argocd-repo-server -n argocd --timeout=300s
+            kubectl wait --for=condition=Available deployment/argocd-applicationset-controller -n argocd --timeout=300s
+
+            echo "Applying ArgoCD Ingress..."
+            kubectl apply -f manifests/argocd-ingress.yaml
+
+            echo "Deploying ArgoCD Root Application..."
+            kubectl apply -f manifests/argocd-root-app.yaml
+
+            echo ""
+            echo "=========================================="
+            echo "ArgoCD deployed successfully!"
+            echo "=========================================="
+            echo ""
+            echo "Access ArgoCD UI:"
+            echo "  URL: http://{{ .Values.argocd_domain }}"
+            echo ""
+            echo "Get admin password:"
+            echo "  kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+            echo ""
+            echo "ArgoCD will now sync applications from:"
+            echo "  Path: /mnt/atmos-gitops-lab/src/k8s-apps"
+            echo "=========================================="

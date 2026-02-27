@@ -1,0 +1,55 @@
+# Root Application (App of Apps Pattern)
+# This application discovers and manages all applications in the k8s-apps directory
+#
+# How it works:
+# 1. Watches /mnt/atmos-gitops-lab/src/k8s-apps directory (mounted from host)
+# 2. Recursively finds all 'application.yaml' files
+# 3. Creates ArgoCD Application resources for each discovered app
+# 4. Honors sync-wave annotations for ordered deployment
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-app
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  
+  source:
+    repoURL: file:///mnt/atmos-gitops-lab
+    targetRevision: HEAD
+    path: src/k8s-apps
+    
+    directory:
+      recurse: true
+      include: '*/application.yaml'
+      exclude: '{_*/**,.*/**}'
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas

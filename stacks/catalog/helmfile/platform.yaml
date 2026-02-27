@@ -1,0 +1,35 @@
+# Catalog: platform defaults
+#
+# Catalogs define reusable default values for components.
+# Stacks (like stacks/local.yaml) import catalogs and inherit these defaults,
+# overriding only what differs per environment.
+#
+# This catalog is imported via: `import: [catalog/helmfile/platform]`
+# and inherited via: `inherits: [platform/defaults]`
+
+components:
+  helmfile:
+    platform/defaults:
+      metadata:
+        # abstract = not deployed directly, only inherited by stacks
+        type: abstract
+        component: platform
+
+      vars:
+        # ArgoCD configuration
+        argocd_domain: "argocd.localhost"
+        argocd_auto_sync_interval: "30s"
+
+        # Resource limits (for local development)
+        resource_limits:
+          postgres_operator:
+            cpu: "500m"
+            memory: "512Mi"
+          argocd:
+            cpu: "1000m"
+            memory: "1Gi"
+
+        # Tags for resources
+        tags:
+          ManagedBy: "atmos"
+          Component: "platform"

@@ -1,0 +1,48 @@
+# Crunchy Data PostgreSQL Operator Helm Values
+# Generated from Atmos template for {{ .Environment.Name }} environment
+
+# Enable multi-namespace operation (watches all namespaces)
+singleNamespace: false
+
+# Number of operator replicas
+replicas: 1
+
+# Enable debug logging
+debug: true
+
+# Leader Election for High Availability
+pgoControllerLeaseName: cpk-leader-election-lease
+
+# Controller images
+controllerImages:
+  cluster: registry.developers.crunchydata.com/crunchydata/postgres-operator:ubi9-6.0.0-0
+
+# Related images used when image is omitted from PostgresCluster specs
+relatedImages:
+  postgres_17:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi9-17.7-2550
+  postgres_16:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi9-16.11-2550
+  postgres_15:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-postgres:ubi9-15.15-2550
+  pgbackrest:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbackrest:ubi9-2.56.0-2550
+  pgbouncer:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-pgbouncer:ubi9-1.25-2550
+  pgexporter:
+    image: registry.developers.crunchydata.com/crunchydata/crunchy-postgres-exporter:ubi9-0.18.1-2550
+  collector:
+    image: registry.developers.crunchydata.com/crunchydata/postgres-operator:ubi9-6.0.0-0
+
+# Resource configuration for the controller
+resources:
+  controller:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: {{ .Values.resource_limits.postgres_operator.cpu }}
+      memory: {{ .Values.resource_limits.postgres_operator.memory }}
+
+# Image pull secrets (if needed for private registries)
+imagePullSecretNames: []

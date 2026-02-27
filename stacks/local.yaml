@@ -1,0 +1,56 @@
+# Stack: local
+#
+# A stack is an environment-specific configuration that combines components.
+# It imports catalog defaults and overrides values for this environment.
+#
+# Deploy with:
+#   atmos terraform apply cluster-k3d -s local
+#   atmos helmfile apply platform -s local
+
+import:
+  # Import catalog defaults (reusable base values)
+  - catalog/terraform/cluster-k3d
+  - catalog/helmfile/platform
+
+vars:
+  # Atmos context variables (used for naming and identification)
+  namespace: atmos
+  tenant: local
+  environment: dev
+  stage: local
+
+  # Cluster configuration
+  cluster_name: "atmos-local-cluster"
+
+  # project_root is auto-calculated by Terraform (3 levels up from component directory)
+  # Override only if you need a custom path (e.g., project_root: "/custom/path")
+
+  local_ip: "127.0.0.1"
+
+  tags:
+    Environment: "local"
+    Purpose: "local-development"
+    ManagedBy: "atmos"
+
+components:
+  terraform:
+    cluster-k3d:
+      metadata:
+        component: cluster-k3d
+        inherits:
+          - cluster-k3d/defaults
+
+      backend_type: local
+      backend:
+        local:
+          path: ".atmos/terraform.tfstate.d/cluster-k3d-local.tfstate"
+
+  helmfile:
+    platform:
+      metadata:
+        component: platform
+        inherits:
+          - platform/defaults
+
+      kubeconfig_context: "k3d-${vars.cluster_name}"
+      environment: local
